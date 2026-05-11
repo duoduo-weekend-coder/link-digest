@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from extractors.audio import _transcribe_file
+from extractors.audio import _download_audio, _transcribe_file
 
 
 def test_transcribe_file_uses_groq_whisper(monkeypatch, tmp_path):
@@ -36,3 +36,29 @@ def test_transcribe_file_raises_without_groq_key(monkeypatch, tmp_path):
     test_audio.write_bytes(b"fake audio data")
     with pytest.raises(RuntimeError, match="GROQ_API_KEY"):
         _transcribe_file(test_audio)
+
+
+def test_download_audio_passes_cookies_flag_to_yt_dlp(tmp_path):
+    cookies_file = str(tmp_path / "cookies.txt")
+    (tmp_path / "cookies.txt").write_text("# Netscape HTTP Cookie File\n")
+    (tmp_path / "source.mp3").touch()
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        _download_audio("https://example.com/video", str(tmp_path), cookies_file=cookies_file)
+
+    args = mock_run.call_args[0][0]
+    assert "--cookies" in args
+    idx = args.index("--cookies")
+    assert args[idx + 1] == cookies_file
+
+
+def test_download_audio_no_cookies_flag_when_none(tmp_path):
+    (tmp_path / "source.mp3").touch()
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0)
+        _download_audio("https://example.com/video", str(tmp_path), cookies_file=None)
+
+    args = mock_run.call_args[0][0]
+    assert "--cookies" not in args
