@@ -51,7 +51,7 @@ def index() -> FileResponse:
 
 @app.get("/health")
 def health() -> dict:
-    return {"ok": True, "openai_configured": bool(os.getenv("OPENAI_API_KEY"))}
+    return {"ok": True, "groq_configured": bool(os.getenv("GROQ_API_KEY"))}
 
 
 @app.post("/analyze")

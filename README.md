@@ -8,7 +8,7 @@ A small local web app that accepts a link, extracts text or transcript when poss
   - Falls back to audio download + transcription when needed
 - ✅ Podcast / audio links
   - Downloads media with `yt-dlp`
-  - Transcribes with OpenAI audio transcription API
+  - Transcribes with Groq Whisper API
 - ✅ Xiaohongshu links
   - Best-effort public page text extraction only
   - Does **not** promise reliable video/audio transcription for Xiaohongshu
@@ -34,7 +34,7 @@ It may fail on:
 - tiny static HTML frontend
 - `youtube-transcript-api` for YouTube subtitles
 - `yt-dlp` for media download
-- OpenAI API for transcription + summarization
+- Groq API (free tier) for transcription + summarization
 
 ## Setup
 ```bash
@@ -47,9 +47,9 @@ cp .env.example .env
 
 Set env vars in `.env`:
 ```bash
-OPENAI_API_KEY=your_key_here
-OPENAI_MODEL=gpt-4.1-mini
-WHISPER_MODEL=gpt-4o-mini-transcribe
+GROQ_API_KEY=your_key_here
+GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_WHISPER_MODEL=whisper-large-v3
 PORT=8000
 ```
 
