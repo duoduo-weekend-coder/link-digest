@@ -10,6 +10,14 @@ def _clean(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _is_video(soup: BeautifulSoup) -> bool:
+    if soup.find("meta", property="og:video"):
+        return True
+    if soup.find("video"):
+        return True
+    return False
+
+
 def extract_xiaohongshu(url: str) -> dict:
     headers = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
