@@ -60,6 +60,7 @@
         const url = $("url").value.trim();
         if (!url) return;
 
+        $("run").disabled = true;
         $("status").textContent = "处理中...";
         $("summary").value = "";
         $("transcript").value = "";
@@ -74,6 +75,13 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ url }),
           });
+
+          if (!res.ok) {
+            const detail = await res.text();
+            $("progress-section").style.display = "none";
+            $("status").textContent = `服务器错误 ${res.status}: ${detail}`;
+            return;
+          }
 
           const reader = res.body.getReader();
           const decoder = new TextDecoder();
@@ -91,14 +99,19 @@
               const dataMatch = part.match(/^data: (.+)/m);
               if (!evtMatch || !dataMatch) continue;
               const type = evtMatch[1];
-              const data = JSON.parse(dataMatch[1]);
+              let data;
+              try {
+                data = JSON.parse(dataMatch[1]);
+              } catch {
+                continue;
+              }
 
               if (type === "progress") {
                 stepCount++;
                 showProgress(data.message, stepCount);
               } else if (type === "result") {
                 hideProgress();
-                $("status").textContent = `完成。来源: ${data.source_type}. ${data.notes.join(" | ")}`;
+                $("status").textContent = `完成。来源: ${data.source_type}. ${(data.notes || []).join(" | ")}`;
                 $("summary").value = data.summary || "";
                 $("transcript").value = data.transcript || "";
               } else if (type === "error") {
@@ -108,9 +121,26 @@
               }
             }
           }
+          if (buf.trim()) {
+            const evtMatch = buf.match(/^event: (\w+)/m);
+            const dataMatch = buf.match(/^data: (.+)/m);
+            if (evtMatch && dataMatch) {
+              try {
+                const type = evtMatch[1];
+                const data = JSON.parse(dataMatch[1]);
+                if (type === "error") {
+                  $("progress-section").style.display = "none";
+                  const notes = (data.notes || []).join(" | ");
+                  $("status").textContent = `失败: ${data.message}${notes ? " — " + notes : ""}`;
+                }
+              } catch { /* ignore malformed trailing frame */ }
+            }
+          }
         } catch (err) {
           $("progress-section").style.display = "none";
           $("status").textContent = `网络错误: ${err.message}`;
+        } finally {
+          $("run").disabled = false;
         }
       });
     </script>
