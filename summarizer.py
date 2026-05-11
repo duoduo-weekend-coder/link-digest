@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from openai import OpenAI
+from groq import Groq
 
 
 SYSTEM_PROMPT = """You turn raw transcripts or extracted page text into clean, useful notes.
@@ -16,18 +16,18 @@ Be honest when the source text looks partial or noisy.
 
 
 def summarize_text(source_type: str, source_title: str | None, transcript: str) -> str:
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is required for summarization")
+        raise RuntimeError("GROQ_API_KEY is required for summarization")
 
-    model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
-    client = OpenAI(api_key=api_key)
+    model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    client = Groq(api_key=api_key)
     prompt = f"Source type: {source_type}\nTitle: {source_title or 'Unknown'}\n\nSource text:\n{transcript[:20000]}"
-    response = client.responses.create(
+    response = client.chat.completions.create(
         model=model,
-        input=[
+        messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ],
     )
-    return response.output_text.strip()
+    return response.choices[0].message.content.strip()
