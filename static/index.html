@@ -60,7 +60,6 @@
         const url = $("url").value.trim();
         if (!url) return;
 
-        $("run").disabled = true;
         $("status").textContent = "处理中...";
         $("summary").value = "";
         $("transcript").value = "";
@@ -69,6 +68,23 @@
         $("progress-label").textContent = "";
         let stepCount = 0;
 
+        function handleEvent(type, data) {
+          if (type === "progress") {
+            stepCount++;
+            showProgress(data.message, stepCount);
+          } else if (type === "result") {
+            hideProgress();
+            $("status").textContent = `完成。来源: ${data.source_type}. ${(data.notes || []).join(" | ")}`;
+            $("summary").value = data.summary || "";
+            $("transcript").value = data.transcript || "";
+          } else if (type === "error") {
+            $("progress-section").style.display = "none";
+            const notes = (data.notes || []).join(" | ");
+            $("status").textContent = `失败: ${data.message}${notes ? " — " + notes : ""}`;
+          }
+        }
+
+        $("run").disabled = true;
         try {
           const res = await fetch("/analyze", {
             method: "POST",
@@ -105,34 +121,16 @@
               } catch {
                 continue;
               }
-
-              if (type === "progress") {
-                stepCount++;
-                showProgress(data.message, stepCount);
-              } else if (type === "result") {
-                hideProgress();
-                $("status").textContent = `完成。来源: ${data.source_type}. ${(data.notes || []).join(" | ")}`;
-                $("summary").value = data.summary || "";
-                $("transcript").value = data.transcript || "";
-              } else if (type === "error") {
-                $("progress-section").style.display = "none";
-                const notes = (data.notes || []).join(" | ");
-                $("status").textContent = `失败: ${data.message}${notes ? " — " + notes : ""}`;
-              }
+              handleEvent(type, data);
             }
           }
+
           if (buf.trim()) {
             const evtMatch = buf.match(/^event: (\w+)/m);
             const dataMatch = buf.match(/^data: (.+)/m);
             if (evtMatch && dataMatch) {
               try {
-                const type = evtMatch[1];
-                const data = JSON.parse(dataMatch[1]);
-                if (type === "error") {
-                  $("progress-section").style.display = "none";
-                  const notes = (data.notes || []).join(" | ");
-                  $("status").textContent = `失败: ${data.message}${notes ? " — " + notes : ""}`;
-                }
+                handleEvent(evtMatch[1], JSON.parse(dataMatch[1]));
               } catch { /* ignore malformed trailing frame */ }
             }
           }

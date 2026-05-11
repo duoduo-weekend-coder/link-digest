@@ -36,7 +36,6 @@ app = FastAPI(title="Link Summarizer MVP")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -65,6 +64,7 @@ async def analyze(request: AnalyzeRequest) -> StreamingResponse:
 
 
 async def _analyze_stream(url: str):
+    source_type = "unknown"
     try:
         yield _sse("progress", {"step": "detecting", "message": "检测链接类型..."})
         source_type = detect_source_type(url)
@@ -108,4 +108,4 @@ async def _analyze_stream(url: str):
             "notes": extracted.get("notes", []),
         })
     except Exception as exc:
-        yield _sse("error", {"message": str(exc), "source_type": locals().get("source_type", "unknown"), "notes": []})
+        yield _sse("error", {"message": str(exc), "source_type": source_type, "notes": []})
