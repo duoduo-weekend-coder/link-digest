@@ -4,7 +4,6 @@ import os
 import re
 import subprocess
 import tempfile
-from pathlib import Path
 
 import httpx
 from bs4 import BeautifulSoup
@@ -95,7 +94,7 @@ def _try_video_extract(url: str, on_chunk) -> dict | None:
                 "transcript": transcript,
                 "notes": ["Downloaded video audio with yt-dlp (no cookie)."],
             }
-        except subprocess.CalledProcessError:
+        except (subprocess.CalledProcessError, FileNotFoundError):
             pass
 
         # Attempt 2: with XHS_COOKIES if available
