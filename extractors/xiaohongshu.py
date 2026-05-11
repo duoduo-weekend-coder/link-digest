@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+import tempfile
+from pathlib import Path
 
 import httpx
 from bs4 import BeautifulSoup
+
+from extractors.audio import _download_audio, _transcribe_file
+
+_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+}
 
 
 def _clean(text: str) -> str:
@@ -18,24 +28,7 @@ def _is_video(soup: BeautifulSoup) -> bool:
     return False
 
 
-def extract_xiaohongshu(url: str) -> dict:
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    }
-
-    try:
-        response = httpx.get(url, headers=headers, follow_redirects=True, timeout=20)
-        response.raise_for_status()
-    except Exception as exc:
-        return {
-            "ok": False,
-            "source_type": "xiaohongshu",
-            "title": None,
-            "transcript": None,
-            "notes": [f"Request failed: {exc}", "Likely blocked by login, anti-bot, or unavailable page."],
-        }
-
-    soup = BeautifulSoup(response.text, "html.parser")
+def _extract_from_soup(soup: BeautifulSoup) -> dict:
     title = None
     description = None
 
@@ -63,7 +56,7 @@ def extract_xiaohongshu(url: str) -> dict:
                 text_candidates.append(text)
 
     deduped = []
-    seen = set()
+    seen: set[str] = set()
     for item in text_candidates:
         if item and item not in seen:
             seen.add(item)
@@ -76,7 +69,7 @@ def extract_xiaohongshu(url: str) -> dict:
             "source_type": "xiaohongshu",
             "title": title,
             "transcript": None,
-            "notes": ["Could not extract useful public text from Xiaohongshu.", "Private, login-only, or anti-bot pages are intentionally unsupported."],
+            "notes": ["Could not extract useful public text from Xiaohongshu."],
         }
 
     return {
@@ -84,5 +77,74 @@ def extract_xiaohongshu(url: str) -> dict:
         "source_type": "xiaohongshu",
         "title": title,
         "transcript": transcript,
-        "notes": ["Best-effort public-page text extraction only.", "Video/audio transcription is not guaranteed for Xiaohongshu links in this MVP."],
+        "notes": ["Best-effort public-page text extraction only."],
     }
+
+
+def _try_video_extract(url: str, on_chunk) -> dict | None:
+    """Two-attempt yt-dlp download. Returns result dict on success, None if both attempts fail."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Attempt 1: no cookie
+        try:
+            audio_path = _download_audio(url, tmpdir, cookies_file=None)
+            transcript = _transcribe_file(audio_path, on_chunk=on_chunk)
+            return {
+                "ok": True,
+                "source_type": "xiaohongshu",
+                "title": None,
+                "transcript": transcript,
+                "notes": ["Downloaded video audio with yt-dlp (no cookie)."],
+            }
+        except subprocess.CalledProcessError:
+            pass
+
+        # Attempt 2: with XHS_COOKIES if available
+        cookie_str = os.getenv("XHS_COOKIES")
+        if not cookie_str:
+            return None
+
+        cookies_file: str | None = None
+        try:
+            with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as cf:
+                cf.write(cookie_str)
+                cookies_file = cf.name
+            audio_path = _download_audio(url, tmpdir, cookies_file=cookies_file)
+            transcript = _transcribe_file(audio_path, on_chunk=on_chunk)
+            return {
+                "ok": True,
+                "source_type": "xiaohongshu",
+                "title": None,
+                "transcript": transcript,
+                "notes": ["Downloaded video audio with yt-dlp (XHS_COOKIES used)."],
+            }
+        except Exception:
+            return None
+        finally:
+            if cookies_file:
+                os.unlink(cookies_file)
+
+
+def extract_xiaohongshu(url: str, on_chunk=None) -> dict:
+    try:
+        response = httpx.get(url, headers=_HEADERS, follow_redirects=True, timeout=20)
+        response.raise_for_status()
+    except Exception as exc:
+        return {
+            "ok": False,
+            "source_type": "xiaohongshu",
+            "title": None,
+            "transcript": None,
+            "notes": [f"Request failed: {exc}", "Likely blocked by login, anti-bot, or unavailable page."],
+        }
+
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    if _is_video(soup):
+        result = _try_video_extract(url, on_chunk)
+        if result:
+            return result
+        text_result = _extract_from_soup(soup)
+        text_result["notes"] = ["yt-dlp failed, fell back to text extraction."] + text_result.get("notes", [])
+        return text_result
+
+    return _extract_from_soup(soup)
