@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, HttpUrl
 from dotenv import load_dotenv
@@ -18,6 +20,10 @@ from extractors import (
     extract_youtube,
 )
 from summarizer import summarize_text
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 class AnalyzeRequest(BaseModel):
