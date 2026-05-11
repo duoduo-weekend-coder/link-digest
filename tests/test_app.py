@@ -132,3 +132,33 @@ async def test_analyze_returns_error_event_when_no_transcript():
     error_events = [e for e in events if e["event"] == "error"]
     assert len(error_events) == 1
     assert "notes" in error_events[0]["data"]
+
+
+@pytest.mark.asyncio
+async def test_analyze_xiaohongshu_streams_progress_then_result():
+    mock_extracted = {
+        "ok": True,
+        "source_type": "xiaohongshu",
+        "title": "旅游vlog",
+        "transcript": "今天去了一个很美的地方",
+        "notes": ["Downloaded video audio with yt-dlp (no cookie)."],
+    }
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        with (
+            patch("app.extract_xiaohongshu", return_value=mock_extracted),
+            patch("app.summarize_text", return_value="美丽的旅行摘要。"),
+        ):
+            resp = await client.post(
+                "/analyze", json={"url": "https://www.xiaohongshu.com/explore/abc123"}
+            )
+    assert resp.status_code == 200
+    events = _parse_sse(resp.text)
+    progress_steps = [e["data"]["step"] for e in events if e["event"] == "progress"]
+    assert "detecting" in progress_steps
+    assert "summarizing" in progress_steps
+    result_events = [e for e in events if e["event"] == "result"]
+    assert len(result_events) == 1
+    assert result_events[0]["data"]["summary"] == "美丽的旅行摘要。"
+    assert result_events[0]["data"]["source_type"] == "xiaohongshu"
