@@ -11,6 +11,10 @@
       .card { background: #121a30; border: 1px solid #273150; border-radius: 14px; padding: 16px; margin-top: 18px; }
       .muted { color: #9fb0d9; font-size: 14px; }
       pre, textarea { white-space: pre-wrap; background: #0f172a; color: #e2e8f0; min-height: 180px; }
+      #progress-section { display: none; }
+      .progress-track { background: #1e2d50; border-radius: 8px; height: 8px; overflow: hidden; margin-bottom: 8px; }
+      .progress-fill { background: #5eead4; height: 100%; width: 0%; transition: width 0.4s ease; }
+      .progress-label { color: #9fb0d9; font-size: 13px; }
     </style>
   </head>
   <body>
@@ -18,6 +22,13 @@
     <p class="muted">Paste a YouTube, podcast/audio, Xiaohongshu, or generic webpage link. This MVP is intentionally honest about unsupported links.</p>
     <input id="url" placeholder="https://..." />
     <button id="run">Transcribe + Summarize</button>
+
+    <div id="progress-section" class="card">
+      <div class="progress-track">
+        <div id="progress-fill" class="progress-fill"></div>
+      </div>
+      <span id="progress-label" class="progress-label"></span>
+    </div>
 
     <div id="status" class="card muted">Idle.</div>
     <div class="card">
@@ -31,26 +42,75 @@
 
     <script>
       const $ = (id) => document.getElementById(id);
+
+      function showProgress(message, stepCount) {
+        $("progress-section").style.display = "block";
+        const pct = Math.min(stepCount * 20, 90);
+        $("progress-fill").style.width = pct + "%";
+        $("progress-label").textContent = message;
+      }
+
+      function hideProgress() {
+        $("progress-fill").style.width = "100%";
+        $("progress-label").textContent = "完成";
+        setTimeout(() => { $("progress-section").style.display = "none"; }, 700);
+      }
+
       $("run").addEventListener("click", async () => {
         const url = $("url").value.trim();
         if (!url) return;
-        $("status").textContent = "Working...";
+
+        $("status").textContent = "处理中...";
         $("summary").value = "";
         $("transcript").value = "";
+        $("progress-section").style.display = "block";
+        $("progress-fill").style.width = "0%";
+        $("progress-label").textContent = "";
+        let stepCount = 0;
+
         try {
           const res = await fetch("/analyze", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url })
+            body: JSON.stringify({ url }),
           });
-          const data = await res.json();
-          if (!res.ok) throw data;
-          $("status").textContent = `Done. Source type: ${data.source_type}. ${data.notes.join(" | ")}`;
-          $("summary").value = data.summary || "";
-          $("transcript").value = data.transcript || "";
+
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buf = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const parts = buf.split("\n\n");
+            buf = parts.pop();
+
+            for (const part of parts) {
+              const evtMatch = part.match(/^event: (\w+)/m);
+              const dataMatch = part.match(/^data: (.+)/m);
+              if (!evtMatch || !dataMatch) continue;
+              const type = evtMatch[1];
+              const data = JSON.parse(dataMatch[1]);
+
+              if (type === "progress") {
+                stepCount++;
+                showProgress(data.message, stepCount);
+              } else if (type === "result") {
+                hideProgress();
+                $("status").textContent = `完成。来源: ${data.source_type}. ${data.notes.join(" | ")}`;
+                $("summary").value = data.summary || "";
+                $("transcript").value = data.transcript || "";
+              } else if (type === "error") {
+                $("progress-section").style.display = "none";
+                const notes = (data.notes || []).join(" | ");
+                $("status").textContent = `失败: ${data.message}${notes ? " — " + notes : ""}`;
+              }
+            }
+          }
         } catch (err) {
-          const detail = err.detail || err;
-          $("status").textContent = `Failed: ${JSON.stringify(detail)}`;
+          $("progress-section").style.display = "none";
+          $("status").textContent = `网络错误: ${err.message}`;
         }
       });
     </script>
