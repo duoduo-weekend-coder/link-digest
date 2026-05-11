@@ -56,39 +56,57 @@ def health() -> dict:
 
 
 @app.post("/analyze")
-def analyze(request: AnalyzeRequest) -> dict:
-    url = str(request.url)
-    source_type = detect_source_type(url)
+async def analyze(request: AnalyzeRequest) -> StreamingResponse:
+    return StreamingResponse(
+        _analyze_stream(str(request.url)),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
-    if source_type == "youtube":
-        extracted = extract_youtube(url)
-        if not extracted.get("ok"):
-            extracted = extract_audio(url)
-            extracted.setdefault("notes", []).insert(0, "Fell back to audio transcription because transcript API failed.")
-    elif source_type == "audio":
-        extracted = extract_audio(url)
-    elif source_type == "xiaohongshu":
-        extracted = extract_xiaohongshu(url)
-    else:
-        extracted = extract_generic_webpage(url)
 
-    transcript = extracted.get("transcript")
-    if not transcript:
-        raise HTTPException(
-            status_code=422,
-            detail={
+async def _analyze_stream(url: str):
+    try:
+        yield _sse("progress", {"step": "detecting", "message": "检测链接类型..."})
+        source_type = detect_source_type(url)
+
+        if source_type == "youtube":
+            yield _sse("progress", {"step": "transcript", "message": "获取 YouTube 字幕..."})
+            extracted = await asyncio.to_thread(extract_youtube, url)
+
+            if not extracted.get("ok"):
+                yield _sse("progress", {"step": "audio_download", "message": "下载并转录音频..."})
+                extracted = await asyncio.to_thread(extract_audio, url)
+                extracted.setdefault("notes", []).insert(
+                    0, "Fell back to audio transcription because transcript API failed."
+                )
+        elif source_type == "audio":
+            extracted = await asyncio.to_thread(extract_audio, url)
+        elif source_type == "xiaohongshu":
+            extracted = await asyncio.to_thread(extract_xiaohongshu, url)
+        else:
+            extracted = await asyncio.to_thread(extract_generic_webpage, url)
+
+        transcript = extracted.get("transcript")
+        if not transcript:
+            yield _sse("error", {
                 "message": "Could not extract useful text from this link.",
                 "source_type": source_type,
                 "notes": extracted.get("notes", []),
-            },
+            })
+            return
+
+        yield _sse("progress", {"step": "summarizing", "message": "生成摘要..."})
+        summary = await asyncio.to_thread(
+            summarize_text, source_type, extracted.get("title"), transcript
         )
 
-    summary = summarize_text(source_type, extracted.get("title"), transcript)
-    return {
-        "url": url,
-        "source_type": source_type,
-        "title": extracted.get("title"),
-        "transcript": transcript,
-        "summary": summary,
-        "notes": extracted.get("notes", []),
-    }
+        yield _sse("result", {
+            "url": url,
+            "source_type": source_type,
+            "title": extracted.get("title"),
+            "transcript": transcript,
+            "summary": summary,
+            "notes": extracted.get("notes", []),
+        })
+    except Exception as exc:
+        yield _sse("error", {"message": str(exc), "notes": []})
