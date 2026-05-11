@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from openai import OpenAI
+from groq import Groq
 
 
 AUDIO_EXTENSIONS = (".mp3", ".m4a", ".wav", ".aac", ".ogg", ".mp4", ".mov", ".mkv", ".webm")
@@ -30,12 +30,12 @@ def _download_audio(url: str, workdir: str) -> Path:
 
 
 def _transcribe_file(file_path: Path) -> str:
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise RuntimeError("OPENAI_API_KEY is required for audio transcription")
+        raise RuntimeError("GROQ_API_KEY is required for audio transcription")
 
-    client = OpenAI(api_key=api_key)
-    model = os.getenv("WHISPER_MODEL", "gpt-4o-mini-transcribe")
+    client = Groq(api_key=api_key)
+    model = os.getenv("GROQ_WHISPER_MODEL", "whisper-large-v3")
     with file_path.open("rb") as handle:
         transcript = client.audio.transcriptions.create(model=model, file=handle)
     return getattr(transcript, "text", "") or ""
@@ -51,7 +51,7 @@ def extract_audio(url: str) -> dict:
                 "source_type": "audio",
                 "title": audio_path.name,
                 "transcript": transcript,
-                "notes": ["Downloaded media with yt-dlp.", "Transcribed with OpenAI audio API."],
+                "notes": ["Downloaded media with yt-dlp.", "Transcribed with Groq Whisper API."],
             }
         except subprocess.CalledProcessError as exc:
             detail = exc.stderr.strip() if exc.stderr else str(exc)
