@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -76,9 +76,8 @@ async def _analyze_stream(url: str):
             if not extracted.get("ok"):
                 yield _sse("progress", {"step": "audio_download", "message": "下载并转录音频..."})
                 extracted = await asyncio.to_thread(extract_audio, url)
-                extracted.setdefault("notes", []).insert(
-                    0, "Fell back to audio transcription because transcript API failed."
-                )
+                notes = ["Fell back to audio transcription because transcript API failed."] + list(extracted.get("notes", []))
+                extracted = {**extracted, "notes": notes}
         elif source_type == "audio":
             extracted = await asyncio.to_thread(extract_audio, url)
         elif source_type == "xiaohongshu":
@@ -109,4 +108,4 @@ async def _analyze_stream(url: str):
             "notes": extracted.get("notes", []),
         })
     except Exception as exc:
-        yield _sse("error", {"message": str(exc), "notes": []})
+        yield _sse("error", {"message": str(exc), "source_type": locals().get("source_type", "unknown"), "notes": []})
