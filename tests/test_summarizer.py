@@ -31,6 +31,7 @@ def test_summarize_text_calls_groq_chat_completions(monkeypatch):
     assert messages[0]["role"] == "system"
     assert messages[1]["role"] == "user"
     assert "hello world transcript" in messages[1]["content"]
+    assert "turn raw transcripts" in messages[0]["content"]
     assert result == "A great summary."
 
 

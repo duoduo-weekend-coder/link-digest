@@ -26,6 +26,7 @@ def test_transcribe_file_uses_groq_whisper(monkeypatch, tmp_path):
     mock_groq_cls.assert_called_once_with(api_key="test-key")
     call_kwargs = mock_client.audio.transcriptions.create.call_args.kwargs
     assert call_kwargs["model"] == "whisper-large-v3"
+    assert "file" in call_kwargs
     assert result == "hello from audio"
 
 
