@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Link Summarizer MVP</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 860px; margin: 40px auto; padding: 0 16px; background: #0b1020; color: #eef2ff; }
+      input, button, textarea { width: 100%; box-sizing: border-box; border-radius: 10px; border: 1px solid #2f3b64; padding: 12px; font-size: 16px; }
+      button { background: #5eead4; color: #08111f; font-weight: 700; cursor: pointer; margin-top: 12px; }
+      .card { background: #121a30; border: 1px solid #273150; border-radius: 14px; padding: 16px; margin-top: 18px; }
+      .muted { color: #9fb0d9; font-size: 14px; }
+      pre, textarea { white-space: pre-wrap; background: #0f172a; color: #e2e8f0; min-height: 180px; }
+    </style>
+  </head>
+  <body>
+    <h1>Link Summarizer MVP</h1>
+    <p class="muted">Paste a YouTube, podcast/audio, Xiaohongshu, or generic webpage link. This MVP is intentionally honest about unsupported links.</p>
+    <input id="url" placeholder="https://..." />
+    <button id="run">Transcribe + Summarize</button>
+
+    <div id="status" class="card muted">Idle.</div>
+    <div class="card">
+      <h3>Summary</h3>
+      <textarea id="summary" readonly></textarea>
+    </div>
+    <div class="card">
+      <h3>Transcript / extracted text</h3>
+      <textarea id="transcript" readonly></textarea>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      $("run").addEventListener("click", async () => {
+        const url = $("url").value.trim();
+        if (!url) return;
+        $("status").textContent = "Working...";
+        $("summary").value = "";
+        $("transcript").value = "";
+        try {
+          const res = await fetch("/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url })
+          });
+          const data = await res.json();
+          if (!res.ok) throw data;
+          $("status").textContent = `Done. Source type: ${data.source_type}. ${data.notes.join(" | ")}`;
+          $("summary").value = data.summary || "";
+          $("transcript").value = data.transcript || "";
+        } catch (err) {
+          const detail = err.detail || err;
+          $("status").textContent = `Failed: ${JSON.stringify(detail)}`;
+        }
+      });
+    </script>
+  </body>
+</html>
