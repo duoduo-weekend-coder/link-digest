@@ -1,4 +1,4 @@
-# Link Summarizer MVP
+# Link Digest
 
 A small local web app that accepts a link, extracts text or transcript when possible, and turns it into readable notes.
 
@@ -38,7 +38,7 @@ It may fail on:
 
 ## Setup
 ```bash
-cd link-summarizer
+cd link-digest
 python3.13 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -55,7 +55,7 @@ PORT=8000
 
 ## Run
 ```bash
-cd link-summarizer
+cd link-digest
 source .venv/bin/activate
 uvicorn app:app --reload --port ${PORT:-8000}
 ```

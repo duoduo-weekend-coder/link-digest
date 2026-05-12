@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Link Summarizer</title>
+    <title>Link Digest</title>
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -270,7 +270,7 @@
 
       <!-- Left panel: URL display, button, progress, status -->
       <div class="left-panel">
-        <div class="lp-brand">Link Summarizer</div>
+        <div class="lp-brand">Link Digest</div>
         <div id="lp-url" class="lp-url"></div>
         <button id="run-again" class="lp-btn" disabled>Summarizing…</button>
         <div id="lp-source" class="source-badge" hidden></div>
@@ -373,7 +373,7 @@
         $('transcript-toggle').setAttribute('aria-expanded', 'false');
 
         showSplit();
-        document.title = 'Summarizing… — Link Summarizer';
+        document.title = 'Summarizing… — Link Digest';
       }
 
       function enterDone(sourceType, notes) {
@@ -384,14 +384,14 @@
         const noteStr = notes && notes.length ? '  —  ' + notes.join(' | ') : '';
 
         $('run-again').disabled = false;
-        $('run-again').textContent = 'Summarize again';
+        $('run-again').textContent = 'Summarize another';
         $('lp-progress').hidden = true;
         $('lp-done').hidden = false;
-        $('lp-done').textContent = '✓ 完成 · ' + elapsed + noteStr;
+        $('lp-done').textContent = '✓ Done · ' + elapsed + noteStr;
         $('skeleton').hidden = true;
         $('output').hidden = false;
 
-        document.title = 'Done — Link Summarizer';
+        document.title = 'Done — Link Digest';
       }
 
       function enterError(message, notes) {
@@ -404,7 +404,7 @@
         $('skeleton').hidden = true;
         $('output').hidden = true;
 
-        document.title = 'Link Summarizer';
+        document.title = 'Link Digest';
       }
 
       function showProgress(message, pct) {
@@ -423,7 +423,7 @@
           const tb = $('transcript-body');
           tb.textContent += (tb.textContent ? ' ' : '') + text;
           const pct = total > 1 ? Math.min(35 + Math.round(((chunk_index + 1) / total) * 50), 85) : 65;
-          const label = total > 1 ? '转录分段 ' + (chunk_index + 1) + ' / ' + total + '…' : '转录音频…';
+          const label = total > 1 ? 'Transcribing segment ' + (chunk_index + 1) + ' / ' + total + '…' : 'Transcribing audio…';
           showProgress(label, pct);
         } else if (type === 'result') {
           const srcEl = $('lp-source');
@@ -454,7 +454,7 @@
 
           if (!res.ok) {
             const detail = await res.text();
-            enterError('服务器错误 ' + res.status + ': ' + detail, []);
+            enterError('Server error ' + res.status + ': ' + detail, []);
             return;
           }
 
@@ -484,7 +484,7 @@
           }
         } catch (err) {
           if (err.name === 'AbortError') return;
-          enterError('网络错误: ' + err.message, []);
+          enterError('Network error: ' + err.message, []);
         }
       }
 
@@ -502,7 +502,7 @@
       $('run-again').addEventListener('click', () => {
         if (activeController) activeController.abort();
         showIdle();
-        document.title = 'Link Summarizer';
+        document.title = 'Link Digest';
       });
 
       $('transcript-toggle').addEventListener('click', () => {

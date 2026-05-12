@@ -35,22 +35,22 @@ Triggered on submit. JS adds a `.split-active` class to the layout wrapper.
   - Progress bar (4px height, teal fill) + Chinese status message below it
 - **Right panel** (flex: 1) fades in via `opacity: 0 → 1`, `transform: translateX(8px) → translateX(0)` over 0.3s
   - Shows a skeleton loader (3–4 shimmer bars) while waiting
-- Page `<title>` updates to "Summarizing… — Link Summarizer"
+- Page `<title>` updates to "Summarizing… — Link Digest"
 
 ### ③ Done
 
 Triggered when SSE `result` event arrives.
 
-- Left panel: progress bar replaced by `✓ 完成 · <elapsed>` status line; button re-enables with label "Summarize again"
+- Left panel: progress bar replaced by `✓ 完成 · <elapsed>` status line (elapsed = `Date.now()` at result event minus `Date.now()` at submit, formatted as `Xs` or `Xm Ys`); button re-enables with label "Summarize again"
 - Right panel: skeleton replaced by:
   - **Summary section** — `<div>` with label "SUMMARY" and the summary text in readable prose style (`font-size: 15px`, `line-height: 1.75`)
   - **Transcript section** — collapsed by default. Label row "▶ Transcript" acts as a toggle; clicking expands a `<div>` with the full transcript text in a smaller, muted style
-- Page `<title>` updates to "Done — Link Summarizer"
+- Page `<title>` updates to "Done — Link Digest"
 
 ### Error state
 
-- Left panel: error message in amber/red tone replaces progress area
-- Right panel: hidden (remains in skeleton or cleared)
+- Left panel: error message in `#f87171` replaces progress area
+- Right panel: skeleton cleared, panel hidden (opacity → 0, layout collapses back to single column)
 - Button re-enables with label "Try again"
 
 ---

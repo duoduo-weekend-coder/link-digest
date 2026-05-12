@@ -74,7 +74,7 @@ class AnalyzeRequest(BaseModel):
 
 load_dotenv()
 
-app = FastAPI(title="Link Summarizer MVP")
+app = FastAPI(title="Link Digest")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -165,7 +165,7 @@ async def _analyze_stream(url: str):
         if note:
             notes.append(note)
 
-        yield _sse("progress", {"step": "summarizing", "message": "生成摘要..."})
+        yield _sse("progress", {"step": "summarizing", "message": "Generating summary…"})
         transcript, summary = await asyncio.gather(
             asyncio.to_thread(restore_punctuation, transcript),
             asyncio.to_thread(summarize_text, source_type, extracted.get("title"), transcript),
