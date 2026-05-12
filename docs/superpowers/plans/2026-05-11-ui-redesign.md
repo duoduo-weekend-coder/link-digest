@@ -1,0 +1,691 @@
+# UI Redesign — Centered → Split Panel Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Rewrite `static/index.html` to replace the stacked single-column layout with a polished Centered → Split panel design with smooth CSS transitions.
+
+**Architecture:** Three distinct UI states (idle, processing, done/error) driven by a JS state machine that toggles classes and `hidden` attributes. Idle shows a full-width centered input; processing fades the idle div out and fades the split layout in; done populates the right panel and collapses the skeleton. All SSE event handling logic is preserved — only the DOM targets change.
+
+**Tech Stack:** Vanilla HTML/CSS/JS, no libraries. FastAPI serves the file unchanged via `app.py`.
+
+---
+
+## File Structure
+
+| File | Change |
+|---|---|
+| `static/index.html` | Full rewrite — HTML skeleton, CSS, and JS all replaced |
+
+No other files change.
+
+---
+
+### Task 1: Replace HTML skeleton
+
+Replace the `<head>` metadata and `<body>` content with the new three-state structure. No CSS or JS changes yet — the page will be unstyled but have correct DOM.
+
+**Files:**
+- Modify: `static/index.html`
+
+- [ ] **Step 1: Open the file and verify current content**
+
+  Run: `wc -l static/index.html`
+  Expected: ~157 lines.
+
+- [ ] **Step 2: Replace the entire file with the new skeleton**
+
+  Write the following to `static/index.html`:
+
+  ```html
+  <!doctype html>
+  <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Link Summarizer</title>
+      <style>
+        /* CSS added in Task 2 */
+      </style>
+    </head>
+    <body>
+
+      <!-- ① IDLE STATE: full-viewport centered input -->
+      <div id="idle" class="idle-wrap">
+        <div class="idle-center">
+          <h1 class="idle-title">Summarize any link</h1>
+          <p class="idle-sub">Paste a YouTube, podcast, 小红书, or webpage link</p>
+          <div class="idle-row">
+            <input id="url" type="url" placeholder="Paste a link…" autocomplete="off" spellcheck="false" />
+            <button id="run">Summarize</button>
+          </div>
+          <div class="idle-badges">
+            <span class="badge">YouTube</span>
+            <span class="badge">Podcasts</span>
+            <span class="badge">小红书</span>
+            <span class="badge">Webpages</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ② SPLIT LAYOUT: appears when processing begins -->
+      <div id="split" class="split-wrap">
+
+        <!-- Left panel: URL display, button, progress, status -->
+        <div class="left-panel">
+          <div class="lp-brand">Link Summarizer</div>
+          <div id="lp-url" class="lp-url"></div>
+          <button id="run-again" class="lp-btn" disabled>Summarizing…</button>
+          <div id="lp-source" class="source-badge" hidden></div>
+
+          <div id="lp-progress" class="progress-wrap">
+            <div class="progress-track">
+              <div id="progress-fill" class="progress-fill"></div>
+            </div>
+            <div id="progress-label" class="progress-msg"></div>
+          </div>
+
+          <div id="lp-done" class="status-done" hidden></div>
+          <div id="lp-error" class="error-msg" hidden></div>
+        </div>
+
+        <!-- Right panel: skeleton → output -->
+        <div class="right-panel">
+          <div id="skeleton" class="skeleton">
+            <div class="sk-bar" style="width:35%"></div>
+            <div class="sk-bar" style="width:88%"></div>
+            <div class="sk-bar" style="width:76%"></div>
+            <div class="sk-bar" style="width:82%"></div>
+            <div class="sk-bar" style="width:45%"></div>
+          </div>
+
+          <div id="output" hidden>
+            <div class="output-section">
+              <div class="output-label">Summary</div>
+              <div id="summary" class="output-text summary-text"></div>
+            </div>
+            <div class="output-section">
+              <button class="transcript-toggle" id="transcript-toggle" aria-expanded="false">
+                <span class="chevron">▶</span> Transcript
+              </button>
+              <div id="transcript-body" class="transcript-body" hidden></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <script>
+        /* JS added in Task 3 */
+      </script>
+    </body>
+  </html>
+  ```
+
+- [ ] **Step 3: Verify the file was written correctly**
+
+  Run: `grep -n 'idle-wrap\|split-wrap\|lp-progress\|transcript-toggle' static/index.html`
+  Expected: lines matching each of those class names.
+
+- [ ] **Step 4: Commit**
+
+  ```bash
+  git add static/index.html
+  git commit -m "refactor: replace html skeleton for centered→split layout"
+  ```
+
+---
+
+### Task 2: Add all CSS
+
+Replace the `/* CSS added in Task 2 */` placeholder with the complete stylesheet.
+
+**Files:**
+- Modify: `static/index.html`
+
+- [ ] **Step 1: Replace the style block placeholder**
+
+  Find `/* CSS added in Task 2 */` in `static/index.html` and replace with:
+
+  ```css
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0b1020;
+    color: #eef2ff;
+    min-height: 100vh;
+  }
+
+  /* ── IDLE ── */
+  .idle-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+    transition: opacity 0.2s ease;
+  }
+  .idle-center { width: 100%; max-width: 540px; text-align: center; }
+
+  .idle-title {
+    font-size: clamp(22px, 4vw, 32px);
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 8px;
+  }
+  .idle-sub {
+    font-size: 14px;
+    color: #4a5980;
+    margin-bottom: 28px;
+  }
+
+  .idle-row {
+    display: flex;
+    align-items: center;
+    background: #121a30;
+    border: 1px solid #273150;
+    border-radius: 12px;
+    padding: 6px 6px 6px 16px;
+    gap: 8px;
+  }
+  .idle-row input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #eef2ff;
+    font-size: 15px;
+    font-family: inherit;
+    min-width: 0;
+  }
+  .idle-row input::placeholder { color: #3a4a70; }
+
+  .idle-row button, .lp-btn {
+    background: #5eead4;
+    color: #08111f;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+    font-family: inherit;
+  }
+  .idle-row button:hover, .lp-btn:not(:disabled):hover { opacity: 0.85; }
+  .lp-btn:disabled { background: #1e3a35; color: #2d6b60; cursor: default; }
+
+  .idle-badges {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 16px;
+  }
+  .badge {
+    background: #121a30;
+    border: 1px solid #1e2d50;
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 12px;
+    color: #4a5980;
+  }
+
+  /* ── SPLIT ── */
+  .split-wrap {
+    display: none;
+    min-height: 100vh;
+  }
+  .right-panel {
+    opacity: 0;
+    transform: translateX(12px);
+    transition: opacity 0.35s ease 0.05s, transform 0.35s ease 0.05s;
+  }
+  .split-wrap.visible .right-panel {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  /* Left panel */
+  .left-panel {
+    width: 300px;
+    min-width: 260px;
+    background: #0d1525;
+    border-right: 1px solid #1e2d50;
+    padding: 28px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+  .lp-brand {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #5eead4;
+  }
+  .lp-url {
+    font-size: 12px;
+    color: #4a5980;
+    word-break: break-all;
+    background: #121a30;
+    border: 1px solid #1e2d50;
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .lp-btn { width: 100%; }
+
+  .source-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #121a30;
+    border: 1px solid #1e2d50;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    color: #9fb0d9;
+  }
+  .source-badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #5eead4;
+    flex-shrink: 0;
+  }
+
+  .progress-wrap { display: flex; flex-direction: column; gap: 6px; }
+  .progress-track { background: #1e2d50; border-radius: 4px; height: 4px; overflow: hidden; }
+  .progress-fill { background: #5eead4; height: 100%; border-radius: 4px; width: 0%; transition: width 0.4s ease; }
+  .progress-msg { font-size: 12px; color: #4a5980; }
+
+  .status-done { font-size: 13px; color: #5eead4; }
+  .error-msg { font-size: 12px; color: #f87171; line-height: 1.5; }
+
+  /* Right panel */
+  .right-panel {
+    flex: 1;
+    padding: 28px 32px;
+    overflow-y: auto;
+  }
+
+  /* Skeleton loader */
+  .skeleton { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+  .sk-bar {
+    height: 11px;
+    background: #1e2d50;
+    border-radius: 4px;
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+  @keyframes shimmer {
+    0%, 100% { opacity: 0.35; }
+    50%       { opacity: 0.75; }
+  }
+
+  /* Output */
+  #output { display: flex; flex-direction: column; gap: 28px; }
+  .output-section { display: flex; flex-direction: column; gap: 8px; }
+  .output-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #4a5980;
+  }
+  .summary-text {
+    font-size: 15px;
+    line-height: 1.75;
+    color: #d0daf5;
+    white-space: pre-wrap;
+  }
+
+  .transcript-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    color: #4a5980;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    cursor: pointer;
+    padding: 0;
+    font-family: inherit;
+    transition: color 0.15s;
+  }
+  .transcript-toggle:hover { color: #9fb0d9; }
+  .transcript-toggle .chevron { transition: transform 0.2s ease; font-size: 9px; }
+  .transcript-toggle[aria-expanded="true"] .chevron { transform: rotate(90deg); }
+
+  .transcript-body {
+    font-size: 13px;
+    line-height: 1.65;
+    color: #4a5980;
+    white-space: pre-wrap;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 767px) {
+    .split-wrap { flex-direction: column; }
+    .left-panel {
+      width: 100%;
+      border-right: none;
+      border-bottom: 1px solid #1e2d50;
+      padding: 16px;
+    }
+    .right-panel {
+      padding: 20px 16px;
+      transform: none !important;
+    }
+  }
+  ```
+
+- [ ] **Step 2: Open the app in a browser and check idle state**
+
+  Start the dev server if not running: `uvicorn app:app --reload`
+  Open `http://localhost:8000` — you should see a dark page with a centered heading and pill input. The page should be fully styled.
+
+- [ ] **Step 3: Commit**
+
+  ```bash
+  git add static/index.html
+  git commit -m "feat: add full css for centered-to-split layout"
+  ```
+
+---
+
+### Task 3: Add JS state machine
+
+Replace the `/* JS added in Task 3 */` placeholder with the complete JavaScript.
+
+**Files:**
+- Modify: `static/index.html`
+
+- [ ] **Step 1: Replace the JS placeholder**
+
+  Find `/* JS added in Task 3 */` and replace with:
+
+  ```js
+  const $ = id => document.getElementById(id);
+
+  const STEP_PCT = { detecting: 10, transcript: 28, audio_download: 35, summarizing: 88 };
+
+  let startTime = 0;
+  let stepCount = 0;
+
+  // ── Transition helpers ──────────────────────────────────
+  function showSplit() {
+    const idle = $('idle');
+    const split = $('split');
+    idle.style.opacity = '0';
+    idle.style.pointerEvents = 'none';
+    setTimeout(() => {
+      idle.style.display = 'none';
+      idle.style.opacity = '';
+      idle.style.pointerEvents = '';
+      split.style.display = 'flex';
+      // double rAF ensures display:flex is painted before transition fires
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        split.classList.add('visible');
+      }));
+    }, 210);
+  }
+
+  function showIdle() {
+    const idle = $('idle');
+    const split = $('split');
+    split.classList.remove('visible');
+    setTimeout(() => {
+      split.style.display = 'none';
+      idle.style.display = 'flex';
+    }, 360);
+  }
+
+  // ── State machine ────────────────────────────────────────
+  function enterProcessing(url) {
+    startTime = Date.now();
+    stepCount = 0;
+
+    $('lp-url').textContent = url;
+    $('run-again').disabled = true;
+    $('run-again').textContent = 'Summarizing…';
+    $('lp-source').hidden = true;
+    $('lp-progress').hidden = false;
+    $('lp-done').hidden = true;
+    $('lp-error').hidden = true;
+    $('progress-fill').style.width = '0%';
+    $('progress-label').textContent = '';
+    $('skeleton').hidden = false;
+    $('output').hidden = true;
+    $('summary').textContent = '';
+    $('transcript-body').textContent = '';
+    $('transcript-body').hidden = true;
+    $('transcript-toggle').setAttribute('aria-expanded', 'false');
+
+    showSplit();
+    document.title = 'Summarizing… — Link Summarizer';
+  }
+
+  function enterDone(sourceType, notes) {
+    const secs = Math.round((Date.now() - startTime) / 1000);
+    const elapsed = secs >= 60
+      ? `${Math.floor(secs / 60)}m ${secs % 60}s`
+      : `${secs}s`;
+    const noteStr = notes && notes.length ? `  —  ${notes.join(' | ')}` : '';
+
+    $('run-again').disabled = false;
+    $('run-again').textContent = 'Summarize again';
+    $('lp-progress').hidden = true;
+    $('lp-done').hidden = false;
+    $('lp-done').textContent = `✓ 完成 · ${elapsed}${noteStr}`;
+    $('skeleton').hidden = true;
+    $('output').hidden = false;
+
+    document.title = 'Done — Link Summarizer';
+  }
+
+  function enterError(message, notes) {
+    const noteStr = notes && notes.length ? ` — ${notes.join(' | ')}` : '';
+    $('run-again').disabled = false;
+    $('run-again').textContent = 'Try again';
+    $('lp-progress').hidden = true;
+    $('lp-error').hidden = false;
+    $('lp-error').textContent = `${message}${noteStr}`;
+    $('skeleton').hidden = true;
+
+    document.title = 'Link Summarizer';
+  }
+
+  function showProgress(message, pct) {
+    $('progress-fill').style.width = pct + '%';
+    $('progress-label').textContent = message;
+  }
+
+  // ── SSE event handler ────────────────────────────────────
+  function handleEvent(type, data) {
+    if (type === 'progress') {
+      stepCount++;
+      const pct = STEP_PCT[data.step] ?? Math.min(stepCount * 22, 88);
+      showProgress(data.message, pct);
+    } else if (type === 'transcript_chunk') {
+      const { chunk_index, total, text } = data;
+      const tb = $('transcript-body');
+      tb.textContent += (tb.textContent ? ' ' : '') + text;
+      const pct = total > 1 ? Math.min(35 + Math.round(((chunk_index + 1) / total) * 50), 85) : 65;
+      const label = total > 1 ? `转录分段 ${chunk_index + 1} / ${total}…` : '转录音频…';
+      showProgress(label, pct);
+    } else if (type === 'result') {
+      const srcEl = $('lp-source');
+      srcEl.textContent = data.source_type || 'web';
+      srcEl.hidden = false;
+      $('summary').textContent = data.summary || '';
+      if (data.transcript) {
+        $('transcript-body').textContent = data.transcript;
+      }
+      enterDone(data.source_type, data.notes);
+    } else if (type === 'error') {
+      enterError(data.message, data.notes);
+    }
+  }
+
+  // ── SSE stream runner ────────────────────────────────────
+  async function runAnalysis(url) {
+    enterProcessing(url);
+    try {
+      const res = await fetch('/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+
+      if (!res.ok) {
+        const detail = await res.text();
+        enterError(`服务器错误 ${res.status}: ${detail}`, []);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split('\n\n');
+        buf = parts.pop();
+        for (const part of parts) {
+          const evtMatch = part.match(/^event: (\w+)/m);
+          const dataMatch = part.match(/^data: (.+)/m);
+          if (!evtMatch || !dataMatch) continue;
+          try { handleEvent(evtMatch[1], JSON.parse(dataMatch[1])); } catch { /* ignore malformed */ }
+        }
+      }
+      if (buf.trim()) {
+        const evtMatch = buf.match(/^event: (\w+)/m);
+        const dataMatch = buf.match(/^data: (.+)/m);
+        if (evtMatch && dataMatch) {
+          try { handleEvent(evtMatch[1], JSON.parse(dataMatch[1])); } catch { /* ignore */ }
+        }
+      }
+    } catch (err) {
+      enterError(`网络错误: ${err.message}`, []);
+    }
+  }
+
+  // ── Event listeners ──────────────────────────────────────
+  $('run').addEventListener('click', () => {
+    const url = $('url').value.trim();
+    if (!url) return;
+    runAnalysis(url);
+  });
+
+  $('url').addEventListener('keydown', e => {
+    if (e.key === 'Enter') $('run').click();
+  });
+
+  $('run-again').addEventListener('click', () => {
+    showIdle();
+    document.title = 'Link Summarizer';
+  });
+
+  $('transcript-toggle').addEventListener('click', () => {
+    const body = $('transcript-body');
+    const btn = $('transcript-toggle');
+    const expanded = btn.getAttribute('aria-expanded') === 'true';
+    btn.setAttribute('aria-expanded', String(!expanded));
+    body.hidden = expanded;
+  });
+  ```
+
+- [ ] **Step 2: Verify the script block was written**
+
+  Run: `grep -n 'runAnalysis\|enterProcessing\|enterDone\|enterError\|showSplit' static/index.html`
+  Expected: all five function names appear.
+
+- [ ] **Step 3: Commit**
+
+  ```bash
+  git add static/index.html
+  git commit -m "feat: add js state machine for centered-to-split ui"
+  ```
+
+---
+
+### Task 4: Browser verification
+
+Test all states and edge cases in the browser.
+
+**Files:** none modified
+
+- [ ] **Step 1: Start dev server**
+
+  ```bash
+  uvicorn app:app --reload
+  ```
+
+  Open `http://localhost:8000`.
+
+- [ ] **Step 2: Verify idle state**
+
+  Expected:
+  - Page is centered vertically with heading "Summarize any link"
+  - Subtext and four source badges visible
+  - URL input is in a pill-shaped row with "Summarize" button inside
+
+- [ ] **Step 3: Verify transition to split**
+
+  Paste any URL and click Summarize.
+  Expected:
+  - Idle fades out (0.2s)
+  - Split layout appears — left panel has the URL and "Summarizing…" button (disabled)
+  - Right panel fades+slides in (0.35s) showing skeleton shimmer bars
+  - Progress label updates as SSE events arrive
+  - Source badge appears (e.g. "YouTube") once the source type is detected
+
+- [ ] **Step 4: Verify done state**
+
+  Wait for a result.
+  Expected:
+  - Skeleton replaced by summary text (large, readable)
+  - "▶ Transcript" toggle visible — click it to expand the transcript
+  - Left panel shows "✓ 完成 · Xs" with elapsed time
+  - Button reads "Summarize again"
+  - Page title reads "Done — Link Summarizer"
+
+- [ ] **Step 5: Verify "Summarize again" → idle**
+
+  Click "Summarize again".
+  Expected:
+  - Split fades out
+  - Idle fades back in, URL input still has the previous URL
+
+- [ ] **Step 6: Verify error state**
+
+  Paste an intentionally invalid/unsupported URL (e.g. `https://example.com/404-page`) and submit.
+  Expected:
+  - Left panel shows error message in red
+  - Skeleton hidden
+  - Button reads "Try again"
+
+- [ ] **Step 7: Verify responsive layout**
+
+  Resize browser to < 768px.
+  Expected:
+  - Left panel becomes full-width and stacks above right panel
+  - No horizontal overflow
+
+- [ ] **Step 8: Commit (only if any final tweaks were needed)**
+
+  ```bash
+  git add static/index.html
+  git commit -m "fix: ui tweaks from browser verification"
+  ```
+
+  Skip this step if no changes were needed.
