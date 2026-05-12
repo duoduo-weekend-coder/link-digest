@@ -315,10 +315,11 @@
     <script>
       const $ = id => document.getElementById(id);
 
-      const STEP_PCT = { detecting: 10, transcript: 28, audio_download: 35, summarizing: 88 };
+      const STEP_PCT = { detecting: 10, extracting: 20, transcript: 28, audio_download: 35, summarizing: 88 };
 
       let startTime = 0;
       let stepCount = 0;
+      let activeController = null;
 
       // ── Transition helpers ──────────────────────────────────
       function showSplit() {
@@ -344,7 +345,9 @@
         split.classList.remove('visible');
         setTimeout(() => {
           split.style.display = 'none';
+          idle.style.opacity = '0';
           idle.style.display = 'flex';
+          requestAnimationFrame(() => { idle.style.opacity = ''; });
         }, 360);
       }
 
@@ -399,6 +402,7 @@
         $('lp-error').hidden = false;
         $('lp-error').textContent = message + noteStr;
         $('skeleton').hidden = true;
+        $('output').hidden = true;
 
         document.title = 'Link Summarizer';
       }
@@ -439,10 +443,13 @@
       async function runAnalysis(url) {
         enterProcessing(url);
         try {
+          if (activeController) activeController.abort();
+          activeController = new AbortController();
           const res = await fetch('/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url }),
+            signal: activeController.signal,
           });
 
           if (!res.ok) {
