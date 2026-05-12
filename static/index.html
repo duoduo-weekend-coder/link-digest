@@ -5,7 +5,242 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Link Summarizer</title>
     <style>
-      /* CSS added in Task 2 */
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: #0b1020;
+        color: #eef2ff;
+        min-height: 100vh;
+      }
+
+      /* ── IDLE ── */
+      .idle-wrap {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 24px;
+        transition: opacity 0.2s ease;
+      }
+      .idle-center { width: 100%; max-width: 540px; text-align: center; }
+
+      .idle-title {
+        font-size: clamp(22px, 4vw, 32px);
+        font-weight: 700;
+        letter-spacing: -0.5px;
+        margin-bottom: 8px;
+      }
+      .idle-sub {
+        font-size: 14px;
+        color: #4a5980;
+        margin-bottom: 28px;
+      }
+
+      .idle-row {
+        display: flex;
+        align-items: center;
+        background: #121a30;
+        border: 1px solid #273150;
+        border-radius: 12px;
+        padding: 6px 6px 6px 16px;
+        gap: 8px;
+      }
+      .idle-row input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        outline: none;
+        color: #eef2ff;
+        font-size: 15px;
+        font-family: inherit;
+        min-width: 0;
+      }
+      .idle-row input::placeholder { color: #3a4a70; }
+
+      .idle-row button, .lp-btn {
+        background: #5eead4;
+        color: #08111f;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 20px;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: opacity 0.15s;
+        font-family: inherit;
+      }
+      .idle-row button:hover, .lp-btn:not(:disabled):hover { opacity: 0.85; }
+      .lp-btn:disabled { background: #1e3a35; color: #2d6b60; cursor: default; }
+
+      .idle-badges {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-top: 16px;
+      }
+      .badge {
+        background: #121a30;
+        border: 1px solid #1e2d50;
+        border-radius: 20px;
+        padding: 4px 12px;
+        font-size: 12px;
+        color: #4a5980;
+      }
+
+      /* ── SPLIT ── */
+      .split-wrap {
+        display: none;
+        min-height: 100vh;
+      }
+      .split-wrap.visible {
+        display: flex;
+      }
+      .right-panel {
+        opacity: 0;
+        transform: translateX(12px);
+        transition: opacity 0.35s ease 0.05s, transform 0.35s ease 0.05s;
+        flex: 1;
+        padding: 28px 32px;
+        overflow-y: auto;
+      }
+      .split-wrap.visible .right-panel {
+        opacity: 1;
+        transform: translateX(0);
+      }
+
+      /* Left panel */
+      .left-panel {
+        width: 300px;
+        min-width: 260px;
+        background: #0d1525;
+        border-right: 1px solid #1e2d50;
+        padding: 28px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        overflow-y: auto;
+        flex-shrink: 0;
+      }
+      .lp-brand {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: #5eead4;
+      }
+      .lp-url {
+        font-size: 12px;
+        color: #4a5980;
+        word-break: break-all;
+        background: #121a30;
+        border: 1px solid #1e2d50;
+        border-radius: 8px;
+        padding: 8px 10px;
+      }
+      .lp-btn { width: 100%; }
+
+      .source-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #121a30;
+        border: 1px solid #1e2d50;
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        color: #9fb0d9;
+      }
+      .source-badge::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #5eead4;
+        flex-shrink: 0;
+      }
+
+      .progress-wrap { display: flex; flex-direction: column; gap: 6px; }
+      .progress-track { background: #1e2d50; border-radius: 4px; height: 4px; overflow: hidden; }
+      .progress-fill { background: #5eead4; height: 100%; border-radius: 4px; width: 0%; transition: width 0.4s ease; }
+      .progress-msg { font-size: 12px; color: #4a5980; }
+
+      .status-done { font-size: 13px; color: #5eead4; }
+      .error-msg { font-size: 12px; color: #f87171; line-height: 1.5; }
+
+      /* Skeleton loader */
+      .skeleton { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+      .sk-bar {
+        height: 11px;
+        background: #1e2d50;
+        border-radius: 4px;
+        animation: shimmer 1.4s ease-in-out infinite;
+      }
+      @keyframes shimmer {
+        0%, 100% { opacity: 0.35; }
+        50%       { opacity: 0.75; }
+      }
+
+      /* Output */
+      #output { display: flex; flex-direction: column; gap: 28px; }
+      .output-section { display: flex; flex-direction: column; gap: 8px; }
+      .output-label {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: #4a5980;
+      }
+      .summary-text {
+        font-size: 15px;
+        line-height: 1.75;
+        color: #d0daf5;
+        white-space: pre-wrap;
+      }
+
+      .transcript-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: none;
+        border: none;
+        color: #4a5980;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        cursor: pointer;
+        padding: 0;
+        font-family: inherit;
+        transition: color 0.15s;
+      }
+      .transcript-toggle:hover { color: #9fb0d9; }
+      .transcript-toggle .chevron { transition: transform 0.2s ease; font-size: 9px; }
+      .transcript-toggle[aria-expanded="true"] .chevron { transform: rotate(90deg); }
+
+      .transcript-body {
+        font-size: 13px;
+        line-height: 1.65;
+        color: #4a5980;
+        white-space: pre-wrap;
+      }
+
+      /* ── RESPONSIVE ── */
+      @media (max-width: 767px) {
+        .split-wrap.visible { flex-direction: column; }
+        .left-panel {
+          width: 100%;
+          border-right: none;
+          border-bottom: 1px solid #1e2d50;
+          padding: 16px;
+        }
+        .right-panel {
+          padding: 20px 16px;
+          transform: none !important;
+        }
+      }
     </style>
   </head>
   <body>
