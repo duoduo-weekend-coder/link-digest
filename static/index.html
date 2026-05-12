@@ -3,144 +3,80 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Link Summarizer MVP</title>
+    <title>Link Summarizer</title>
     <style>
-      body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 860px; margin: 40px auto; padding: 0 16px; background: #0b1020; color: #eef2ff; }
-      input, button, textarea { width: 100%; box-sizing: border-box; border-radius: 10px; border: 1px solid #2f3b64; padding: 12px; font-size: 16px; }
-      button { background: #5eead4; color: #08111f; font-weight: 700; cursor: pointer; margin-top: 12px; }
-      .card { background: #121a30; border: 1px solid #273150; border-radius: 14px; padding: 16px; margin-top: 18px; }
-      .muted { color: #9fb0d9; font-size: 14px; }
-      pre, textarea { white-space: pre-wrap; background: #0f172a; color: #e2e8f0; min-height: 180px; }
-      #progress-section { display: none; }
-      .progress-track { background: #1e2d50; border-radius: 8px; height: 8px; overflow: hidden; margin-bottom: 8px; }
-      .progress-fill { background: #5eead4; height: 100%; width: 0%; transition: width 0.4s ease; }
-      .progress-label { color: #9fb0d9; font-size: 13px; }
+      /* CSS added in Task 2 */
     </style>
   </head>
   <body>
-    <h1>Link Summarizer MVP</h1>
-    <p class="muted">Paste a YouTube, podcast/audio, Xiaohongshu, or generic webpage link. This MVP is intentionally honest about unsupported links.</p>
-    <input id="url" placeholder="https://..." />
-    <button id="run">Transcribe + Summarize</button>
 
-    <div id="progress-section" class="card">
-      <div class="progress-track">
-        <div id="progress-fill" class="progress-fill"></div>
+    <!-- ① IDLE STATE: full-viewport centered input -->
+    <div id="idle" class="idle-wrap">
+      <div class="idle-center">
+        <h1 class="idle-title">Summarize any link</h1>
+        <p class="idle-sub">Paste a YouTube, podcast, 小红书, or webpage link</p>
+        <div class="idle-row">
+          <input id="url" type="url" placeholder="Paste a link…" autocomplete="off" spellcheck="false" />
+          <button id="run">Summarize</button>
+        </div>
+        <div class="idle-badges">
+          <span class="badge">YouTube</span>
+          <span class="badge">Podcasts</span>
+          <span class="badge">小红书</span>
+          <span class="badge">Webpages</span>
+        </div>
       </div>
-      <span id="progress-label" class="progress-label"></span>
     </div>
 
-    <div id="status" class="card muted">Idle.</div>
-    <div class="card">
-      <h3>Summary</h3>
-      <textarea id="summary" readonly></textarea>
-    </div>
-    <div class="card">
-      <h3>Transcript / extracted text</h3>
-      <textarea id="transcript" readonly></textarea>
+    <!-- ② SPLIT LAYOUT: appears when processing begins -->
+    <div id="split" class="split-wrap">
+
+      <!-- Left panel: URL display, button, progress, status -->
+      <div class="left-panel">
+        <div class="lp-brand">Link Summarizer</div>
+        <div id="lp-url" class="lp-url"></div>
+        <button id="run-again" class="lp-btn" disabled>Summarizing…</button>
+        <div id="lp-source" class="source-badge" hidden></div>
+
+        <div id="lp-progress" class="progress-wrap">
+          <div class="progress-track">
+            <div id="progress-fill" class="progress-fill"></div>
+          </div>
+          <div id="progress-label" class="progress-msg"></div>
+        </div>
+
+        <div id="lp-done" class="status-done" hidden></div>
+        <div id="lp-error" class="error-msg" hidden></div>
+      </div>
+
+      <!-- Right panel: skeleton → output -->
+      <div class="right-panel">
+        <div id="skeleton" class="skeleton">
+          <div class="sk-bar" style="width:35%"></div>
+          <div class="sk-bar" style="width:88%"></div>
+          <div class="sk-bar" style="width:76%"></div>
+          <div class="sk-bar" style="width:82%"></div>
+          <div class="sk-bar" style="width:45%"></div>
+        </div>
+
+        <div id="output" hidden>
+          <div class="output-section">
+            <div class="output-label">Summary</div>
+            <div id="summary" class="output-text summary-text"></div>
+          </div>
+          <div class="output-section">
+            <button class="transcript-toggle" id="transcript-toggle" aria-expanded="false">
+              <span class="chevron">▶</span> Transcript
+            </button>
+            <div id="transcript-body" class="transcript-body" hidden></div>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <script>
-      const $ = (id) => document.getElementById(id);
-
-      function showProgress(message, stepCount) {
-        $("progress-section").style.display = "block";
-        const pct = Math.min(stepCount * 20, 90);
-        $("progress-fill").style.width = pct + "%";
-        $("progress-label").textContent = message;
-      }
-
-      function hideProgress() {
-        $("progress-fill").style.width = "100%";
-        $("progress-label").textContent = "完成";
-        setTimeout(() => { $("progress-section").style.display = "none"; }, 700);
-      }
-
-      $("run").addEventListener("click", async () => {
-        const url = $("url").value.trim();
-        if (!url) return;
-
-        $("status").textContent = "处理中...";
-        $("summary").value = "";
-        $("transcript").value = "";
-        $("progress-section").style.display = "block";
-        $("progress-fill").style.width = "0%";
-        $("progress-label").textContent = "";
-        let stepCount = 0;
-
-        function handleEvent(type, data) {
-          if (type === "progress") {
-            stepCount++;
-            showProgress(data.message, stepCount);
-          } else if (type === "result") {
-            hideProgress();
-            $("status").textContent = `完成。来源: ${data.source_type}. ${(data.notes || []).join(" | ")}`;
-            $("summary").value = data.summary || "";
-            $("transcript").value = data.transcript || "";
-          } else if (type === "error") {
-            $("progress-section").style.display = "none";
-            const notes = (data.notes || []).join(" | ");
-            $("status").textContent = `失败: ${data.message}${notes ? " — " + notes : ""}`;
-          }
-        }
-
-        $("run").disabled = true;
-        try {
-          const res = await fetch("/analyze", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url }),
-          });
-
-          if (!res.ok) {
-            const detail = await res.text();
-            $("progress-section").style.display = "none";
-            $("status").textContent = `服务器错误 ${res.status}: ${detail}`;
-            return;
-          }
-
-          const reader = res.body.getReader();
-          const decoder = new TextDecoder();
-          let buf = "";
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buf += decoder.decode(value, { stream: true });
-            const parts = buf.split("\n\n");
-            buf = parts.pop();
-
-            for (const part of parts) {
-              const evtMatch = part.match(/^event: (\w+)/m);
-              const dataMatch = part.match(/^data: (.+)/m);
-              if (!evtMatch || !dataMatch) continue;
-              const type = evtMatch[1];
-              let data;
-              try {
-                data = JSON.parse(dataMatch[1]);
-              } catch {
-                continue;
-              }
-              handleEvent(type, data);
-            }
-          }
-
-          if (buf.trim()) {
-            const evtMatch = buf.match(/^event: (\w+)/m);
-            const dataMatch = buf.match(/^data: (.+)/m);
-            if (evtMatch && dataMatch) {
-              try {
-                handleEvent(evtMatch[1], JSON.parse(dataMatch[1]));
-              } catch { /* ignore malformed trailing frame */ }
-            }
-          }
-        } catch (err) {
-          $("progress-section").style.display = "none";
-          $("status").textContent = `网络错误: ${err.message}`;
-        } finally {
-          $("run").disabled = false;
-        }
-      });
+      /* JS added in Task 3 */
     </script>
   </body>
 </html>
