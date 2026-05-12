@@ -72,6 +72,8 @@
         font-family: inherit;
       }
       .idle-row button:hover, .lp-btn:not(:disabled):hover { opacity: 0.85; }
+      .idle-row button:focus-visible, .lp-btn:focus-visible,
+      .transcript-toggle:focus-visible, #url:focus-visible { outline: 2px solid #5eead4; outline-offset: 2px; }
       .lp-btn:disabled { background: #1e3a35; color: #2d6b60; cursor: default; }
 
       .idle-badges {
@@ -264,7 +266,7 @@
     </div>
 
     <!-- ② SPLIT LAYOUT: appears when processing begins -->
-    <div id="split" class="split-wrap" hidden>
+    <div id="split" class="split-wrap">
 
       <!-- Left panel: URL display, button, progress, status -->
       <div class="left-panel">
@@ -297,7 +299,7 @@
         <div id="output" hidden>
           <div class="output-section">
             <div class="output-label">Summary</div>
-            <div id="summary" class="output-text summary-text"></div>
+            <div id="summary" class="summary-text"></div>
           </div>
           <div class="output-section">
             <button class="transcript-toggle" id="transcript-toggle" aria-expanded="false">
