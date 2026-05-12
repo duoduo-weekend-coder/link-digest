@@ -313,7 +313,196 @@
     </div>
 
     <script>
-      /* JS added in Task 3 */
+      const $ = id => document.getElementById(id);
+
+      const STEP_PCT = { detecting: 10, transcript: 28, audio_download: 35, summarizing: 88 };
+
+      let startTime = 0;
+      let stepCount = 0;
+
+      // ── Transition helpers ──────────────────────────────────
+      function showSplit() {
+        const idle = $('idle');
+        const split = $('split');
+        idle.style.opacity = '0';
+        idle.style.pointerEvents = 'none';
+        setTimeout(() => {
+          idle.style.display = 'none';
+          idle.style.opacity = '';
+          idle.style.pointerEvents = '';
+          split.style.display = 'flex';
+          // double rAF ensures display:flex is painted before transition fires
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            split.classList.add('visible');
+          }));
+        }, 210);
+      }
+
+      function showIdle() {
+        const idle = $('idle');
+        const split = $('split');
+        split.classList.remove('visible');
+        setTimeout(() => {
+          split.style.display = 'none';
+          idle.style.display = 'flex';
+        }, 360);
+      }
+
+      // ── State machine ────────────────────────────────────────
+      function enterProcessing(url) {
+        startTime = Date.now();
+        stepCount = 0;
+
+        $('lp-url').textContent = url;
+        $('run-again').disabled = true;
+        $('run-again').textContent = 'Summarizing…';
+        $('lp-source').hidden = true;
+        $('lp-progress').hidden = false;
+        $('lp-done').hidden = true;
+        $('lp-error').hidden = true;
+        $('progress-fill').style.width = '0%';
+        $('progress-label').textContent = '';
+        $('skeleton').hidden = false;
+        $('output').hidden = true;
+        $('summary').textContent = '';
+        $('transcript-body').textContent = '';
+        $('transcript-body').hidden = true;
+        $('transcript-toggle').setAttribute('aria-expanded', 'false');
+
+        showSplit();
+        document.title = 'Summarizing… — Link Summarizer';
+      }
+
+      function enterDone(sourceType, notes) {
+        const secs = Math.round((Date.now() - startTime) / 1000);
+        const elapsed = secs >= 60
+          ? Math.floor(secs / 60) + 'm ' + (secs % 60) + 's'
+          : secs + 's';
+        const noteStr = notes && notes.length ? '  —  ' + notes.join(' | ') : '';
+
+        $('run-again').disabled = false;
+        $('run-again').textContent = 'Summarize again';
+        $('lp-progress').hidden = true;
+        $('lp-done').hidden = false;
+        $('lp-done').textContent = '✓ 完成 · ' + elapsed + noteStr;
+        $('skeleton').hidden = true;
+        $('output').hidden = false;
+
+        document.title = 'Done — Link Summarizer';
+      }
+
+      function enterError(message, notes) {
+        const noteStr = notes && notes.length ? ' — ' + notes.join(' | ') : '';
+        $('run-again').disabled = false;
+        $('run-again').textContent = 'Try again';
+        $('lp-progress').hidden = true;
+        $('lp-error').hidden = false;
+        $('lp-error').textContent = message + noteStr;
+        $('skeleton').hidden = true;
+
+        document.title = 'Link Summarizer';
+      }
+
+      function showProgress(message, pct) {
+        $('progress-fill').style.width = pct + '%';
+        $('progress-label').textContent = message;
+      }
+
+      // ── SSE event handler ────────────────────────────────────
+      function handleEvent(type, data) {
+        if (type === 'progress') {
+          stepCount++;
+          const pct = STEP_PCT[data.step] ?? Math.min(stepCount * 22, 88);
+          showProgress(data.message, pct);
+        } else if (type === 'transcript_chunk') {
+          const { chunk_index, total, text } = data;
+          const tb = $('transcript-body');
+          tb.textContent += (tb.textContent ? ' ' : '') + text;
+          const pct = total > 1 ? Math.min(35 + Math.round(((chunk_index + 1) / total) * 50), 85) : 65;
+          const label = total > 1 ? '转录分段 ' + (chunk_index + 1) + ' / ' + total + '…' : '转录音频…';
+          showProgress(label, pct);
+        } else if (type === 'result') {
+          const srcEl = $('lp-source');
+          srcEl.textContent = data.source_type || 'web';
+          srcEl.hidden = false;
+          $('summary').textContent = data.summary || '';
+          if (data.transcript) {
+            $('transcript-body').textContent = data.transcript;
+          }
+          enterDone(data.source_type, data.notes);
+        } else if (type === 'error') {
+          enterError(data.message, data.notes);
+        }
+      }
+
+      // ── SSE stream runner ────────────────────────────────────
+      async function runAnalysis(url) {
+        enterProcessing(url);
+        try {
+          const res = await fetch('/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url }),
+          });
+
+          if (!res.ok) {
+            const detail = await res.text();
+            enterError('服务器错误 ' + res.status + ': ' + detail, []);
+            return;
+          }
+
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buf = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const parts = buf.split('\n\n');
+            buf = parts.pop();
+            for (const part of parts) {
+              const evtMatch = part.match(/^event: (\w+)/m);
+              const dataMatch = part.match(/^data: (.+)/m);
+              if (!evtMatch || !dataMatch) continue;
+              try { handleEvent(evtMatch[1], JSON.parse(dataMatch[1])); } catch { /* ignore malformed */ }
+            }
+          }
+          if (buf.trim()) {
+            const evtMatch = buf.match(/^event: (\w+)/m);
+            const dataMatch = buf.match(/^data: (.+)/m);
+            if (evtMatch && dataMatch) {
+              try { handleEvent(evtMatch[1], JSON.parse(dataMatch[1])); } catch { /* ignore */ }
+            }
+          }
+        } catch (err) {
+          enterError('网络错误: ' + err.message, []);
+        }
+      }
+
+      // ── Event listeners ──────────────────────────────────────
+      $('run').addEventListener('click', () => {
+        const url = $('url').value.trim();
+        if (!url) return;
+        runAnalysis(url);
+      });
+
+      $('url').addEventListener('keydown', e => {
+        if (e.key === 'Enter') $('run').click();
+      });
+
+      $('run-again').addEventListener('click', () => {
+        showIdle();
+        document.title = 'Link Summarizer';
+      });
+
+      $('transcript-toggle').addEventListener('click', () => {
+        const body = $('transcript-body');
+        const btn = $('transcript-toggle');
+        const expanded = btn.getAttribute('aria-expanded') === 'true';
+        btn.setAttribute('aria-expanded', String(!expanded));
+        body.hidden = expanded;
+      });
     </script>
   </body>
 </html>
