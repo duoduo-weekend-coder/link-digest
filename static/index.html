@@ -483,6 +483,7 @@
             }
           }
         } catch (err) {
+          if (err.name === 'AbortError') return;
           enterError('网络错误: ' + err.message, []);
         }
       }
@@ -499,6 +500,7 @@
       });
 
       $('run-again').addEventListener('click', () => {
+        if (activeController) activeController.abort();
         showIdle();
         document.title = 'Link Summarizer';
       });
